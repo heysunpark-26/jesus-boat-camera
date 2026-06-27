@@ -11,47 +11,46 @@
             padding: 0;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: #111;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #000;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             overflow: hidden;
         }
-        /* 폰 화면 크기에 맞춘 9:16 비율 컨테이너 */
+        /* 화면 전체를 차지하는 9:16 비율의 프레임 뷰포트 */
         #app-container {
             position: relative;
-            width: 100%;
-            max-width: 500px;
+            width: 100vw;
             height: 100vh;
-            max-height: 888px; /* 9:16 최적화 */
+            max-width: 500px;
+            max-height: 888px; 
             background-color: #000;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        /* 실시간 카메라 영상 */
+        /* 실시간 카메라 피드 */
         video {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: cover; /* 화면에 꽉 차게 */
             z-index: 1;
         }
-        /* 투명 PNG 프레임 오버레이 */
+        /* PNG 프레임 오버레이 */
         #frame-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover; /* 프레임이 화면에 꽉 차게 설정 */
-            pointer-events: none; /* 터치가 아래 비디오나 버튼으로 전달되도록 */
+            object-fit: fill; /* 화면 왜곡 없이 프레임 전체가 무조건 채워지도록 설정 */
+            pointer-events: none;
             z-index: 2;
         }
-        /* UI 컨트롤러 영역 */
+        /* UI 컨트롤러 */
         #controls {
             position: absolute;
             bottom: 40px;
@@ -63,34 +62,27 @@
             padding: 0 40px;
             z-index: 3;
         }
-        /* 촬영 버튼 */
         #capture-btn {
-            width: 76px;
-            height: 76px;
+            width: 75px;
+            height: 75px;
             border-radius: 50%;
             background-color: #fff;
-            border: 6px solid rgba(255, 255, 255, 0.4);
+            border: 5px solid rgba(255, 255, 255, 0.4);
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            outline: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         #capture-btn:active {
-            transform: scale(0.92);
-            background-color: #ddd;
+            transform: scale(0.95);
         }
-        /* 카메라 전/후면 전환 버튼 */
         #switch-btn {
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.6);
             color: #fff;
             border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 10px 18px;
+            padding: 10px 20px;
             border-radius: 20px;
             font-size: 14px;
-            font-weight: bold;
             cursor: pointer;
-            backdrop-filter: blur(5px);
         }
-        /* 합성 및 다운로드용 숨김 캔버스 */
         canvas {
             display: none;
         }
@@ -100,13 +92,13 @@
 
     <div id="app-container">
         <video id="video" autoplay playsinline></video>
-        
-        <img id="frame-overlay" src="frame.png" alt="믿음의 항해 프레임">
+        <img id="frame-overlay" src="frame.png" alt="프레임">
         
         <div id="controls">
             <button id="switch-btn">🔄 전환</button>
             <button id="capture-btn"></button>
-            <div style="width: 65px;"></div> </div>
+            <div style="width: 65px;"></div>
+        </div>
     </div>
 
     <canvas id="canvas"></canvas>
@@ -119,15 +111,14 @@
         const canvas = document.getElementById('canvas');
 
         let currentStream = null;
-        let useFrontCamera = true; // 최초 실행 시 전면(셀카) 카메라
+        let useFrontCamera = true;
 
-        // 카메라 구동 함수
         async function startCamera() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
             }
 
-            // 모바일 세로 모드에 맞춘 고해상도 타겟 설정
+            // 고해상도 세로 모드 타겟팅
             const constraints = {
                 video: {
                     facingMode: useFrontCamera ? "user" : "environment",
@@ -140,73 +131,72 @@
             try {
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = currentStream;
-                
-                // 전면 카메라인 경우 사용자가 어색하지 않게 거울 모드(좌우 반전) 적용
                 video.style.transform = useFrontCamera ? "scaleX(-1)" : "scaleX(1)";
             } catch (error) {
-                alert("카메라 권한이 거부되었거나 지원하지 않는 브라우저입니다.");
-                console.error(error);
+                alert("카메라를 실행할 수 없습니다.");
             }
         }
 
-        // 전/후면 카메라 전환
         switchBtn.addEventListener('click', () => {
             useFrontCamera = !useFrontCamera;
             startCamera();
         });
 
-        // 촬영 및 프레임 합성 저장
+        // 중요: 사진 찍을 때 잘림 현상 방지를 위해 캔버스 매핑 전면 수정
         captureBtn.addEventListener('click', () => {
             const ctx = canvas.getContext('2d');
             
-            // 실제 카메라 영상 해상도 기준으로 캔버스 크기 지정
-            const vWidth = video.videoWidth;
-            const vHeight = video.videoHeight;
-            canvas.width = vWidth;
-            canvas.height = vHeight;
+            // 결과물 저장 해상도를 명확하게 9:16 (1080x1920 HD 화질)로 고정합니다.
+            const targetWidth = 1080;
+            const targetHeight = 1920;
+            
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
 
-            // [Step 1] 카메라 프레임 그리기
+            // [1단계] 배경 카메라 화면 그리기
             ctx.save();
             if (useFrontCamera) {
-                // 전면 카메라는 좌우 반전시켜 저장해야 거울처럼 정상적으로 출력됨
-                ctx.translate(vWidth, 0);
+                ctx.translate(targetWidth, 0);
                 ctx.scale(-1, 1);
             }
-            ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+            // 카메라 영상의 실제 비율 계산
+            const videoRatio = video.videoWidth / video.videoHeight;
+            const targetRatio = targetWidth / targetHeight;
+
+            let renderWidth, renderHeight, xOffset, yOffset;
+
+            // 이미지가 캔버스 영역에 꽉 차도록(Cover) 계산
+            if (videoRatio > targetRatio) {
+                renderHeight = targetHeight;
+                renderWidth = targetHeight * videoRatio;
+                xOffset = (targetWidth - renderWidth) / 2;
+                yOffset = 0;
+            } else {
+                renderWidth = targetWidth;
+                renderHeight = targetWidth / videoRatio;
+                xOffset = 0;
+                yOffset = (targetHeight - renderHeight) / 2;
+            }
+
+            ctx.drawImage(video, xOffset, yOffset, renderWidth, renderHeight);
             ctx.restore();
 
-            // [Step 2] 그 위에 투명 PNG 프레임 덮어쓰기
-            // object-fit: cover와 동일한 계산법으로 비율 맞춰 그리기
-            const imgRatio = frame.naturalWidth / frame.naturalHeight;
-            const vidRatio = vWidth / vHeight;
-            let dWidth, dHeight, dx, dy;
+            // [2단계] 그 위에 PNG 프레임을 '정확히 전체 크기'로 덮어쓰기 (잘림 원인 해결)
+            ctx.drawImage(frame, 0, 0, targetWidth, targetHeight);
 
-            if (imgRatio > vidRatio) {
-                dHeight = vHeight;
-                dWidth = vHeight * imgRatio;
-                dx = (vWidth - dWidth) / 2;
-                dy = 0;
-            } else {
-                dWidth = vWidth;
-                dHeight = vWidth / imgRatio;
-                dx = 0;
-                dy = (vHeight - dHeight) / 2;
-            }
-            ctx.drawImage(frame, dx, dy, dWidth, dHeight);
-
-            // [Step 3] 파일 다운로드 실행
+            // [3단계] 이미지 저장
             try {
                 const dataUrl = canvas.toDataURL('image/png');
                 const link = document.createElement('a');
-                link.download = `faith_cruise_${Date.now()}.png`;
+                link.download = `faith_photo_${Date.now()}.png`;
                 link.href = dataUrl;
                 link.click();
             } catch (e) {
-                alert("다운로드 실패: 모바일 인앱 브라우저(카카오톡/인스타 등)에서는 차단될 수 있습니다. 일반 브라우저(Safari/Chrome)로 접속해 주세요.");
+                alert("다운로드에 실패했습니다. 모바일 브라우저 환경을 확인해 주세요.");
             }
         });
 
-        // 실행 시 카메라 켜기
         window.addEventListener('load', startCamera);
     </script>
 </body>
